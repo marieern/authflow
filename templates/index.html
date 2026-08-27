@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fiori App Matrix Builder</title>
+<style>
+  :root {
+    --navy: #f08d0c;
+    --navy-light: #E8F0F7;
+    --border: #D0D7DE;
+    --warn: #B54708;
+    --warn-bg: #FEF3E7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    background: #F6F8FA;
+    color: #1a1a1a;
+  }
+  header {
+    background: var(--navy);
+    color: white;
+    padding: 18px 24px;
+  }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; font-size: 13px; opacity: 0.85; }
+  main { padding: 20px 24px 60px; max-width: 1500px; margin: 0 auto; }
+
+  .panel {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 15px;
+    margin: 0 0 12px;
+    color: var(--navy);
+  }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .field { flex: 1; min-width: 180px; }
+  .field label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #444; }
+  .field input, .field textarea {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+    font-family: monospace; font-size: 12px;
+  }
+  textarea#appIds { min-height: 90px; font-family: Arial, sans-serif; font-size: 13px; }
+
+  button {
+    background: var(--navy); color: white; border: none; padding: 9px 18px;
+    border-radius: 5px; font-size: 13px; cursor: pointer; font-weight: bold;
+  }
+  button.secondary { background: white; color: var(--navy); border: 1px solid var(--navy); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button:hover:not(:disabled) { filter: brightness(1.1); }
+
+  details summary { cursor: pointer; font-size: 13px; color: var(--navy); font-weight: bold; margin-bottom: 8px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { border: 1px solid var(--border); padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: var(--navy-light); position: sticky; top: 0; font-size: 11px; }
+  td[contenteditable="true"] { background: #FFFFF0; min-width: 90px; }
+  td[contenteditable="true"]:focus { outline: 2px solid var(--navy); }
+  .table-wrap { overflow-x: auto; max-height: 65vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+
+  .flag-warn { color: var(--warn); font-weight: bold; }
+  .status-msg { font-size: 13px; margin-top: 8px; }
+  .status-msg.error { color: #B42318; }
+  .status-msg.ok { color: #067647; }
+
+  .raw-app-block { border-top: 1px dashed var(--border); padding: 8px 0; }
+  .raw-app-block pre { background: #f4f4f4; padding: 8px; border-radius: 4px; font-size: 11px; overflow-x: auto; }
+
+  footer.actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Fiori App Matrix Builder</h1>
+  <p>Fetch app info &rarr; review &amp; edit &rarr; export to Excel when you're happy with it.</p>
+</header>
+
+<main>
+
+  <div class="panel">
+    <h2>1. Matrix and App IDs</h2>
+    <div class="row" style="align-items:center; margin-bottom:10px;">
+      <input type="file" id="matrixFile" accept=".xlsx,.xlsm">
+      <button class="secondary" onclick="importMatrix()">Upload matrix</button>
+      <span id="importStatus" class="status-msg"></span>
+    </div>
+    <div class="row">
+      <div class="field"><label for="appIds">App IDs</label><textarea id="appIds" placeholder="One app per line&#10;MD06 (Enduser1, Enduser2)&#10;F2229 (Enduser3)"></textarea></div>
+      <div class="field"><label for="derivations">Derivation per app</label><textarea id="derivations" placeholder="One derivation per line&#10;CHI1&#10;CHI2"></textarea></div>
+    </div>
+    <div class="row" style="margin-top:10px; align-items:center;">
+      <label style="font-size:12px;"><input type="checkbox" id="refreshCache"> Force re-fetch (ignore cache)</label>
+      <button id="fetchBtn" onclick="fetchApps()">Fetch app info</button>
+      <span id="fetchStatus" class="status-msg"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <details>
+      <summary>2. Naming conventions (edit to match your project's naming file — placeholders in curly braces)</summary>
+      <div class="row">
+        <div class="field"><label>Master role name</label><input id="t_master_role_name" value="T:0000_{module}_{activity_code}_{function_descr}"></div>
+        <div class="field"><label>Derived role name</label><input id="t_derived_role_name" value="T:{derivation}_{module}_{activity_code}_{function_descr}"></div>
+        <div class="field"><label>Role description</label><input id="t_role_description" value="{module}-{derivation}-{descr}-{activity_word}"></div>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <div class="field"><label>Business catalog name</label><input id="t_catalog_name" value="Z_BC_{module}_{function_descr}"></div>
+        <div class="field"><label>Catalog description</label><input id="t_catalog_description" value="{descr}"></div>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <div class="field"><label>Space name</label><input id="t_space_name" value="Z_SP_{module}_{function_descr}"></div>
+        <div class="field"><label>Space description</label><input id="t_space_description" value="{descr}"></div>
+        <div class="field"><label>Page name</label><input id="t_page_name" value="Z_PG_{module}_{function_descr}"></div>
+        <div class="field"><label>Page description</label><input id="t_page_description" value="{module} - {function_group} Page"></div>
+      </div>
+      <p style="font-size:11px; color:#666; margin-top:8px;">
+        Available placeholders: <code>{derivation} {module} {function_descr} {function_group} {descr} {persona} {activity_code} {activity_word} {app_title}</code>.
+        Module / Function Group / Derivation are set per row in the table below (default blank — fill in per app), then regenerate names with the button below the table.
+      </p>
+    </details>
+  </div>
+
+  <div class="panel">
+    <h2>3. Review &amp; edit</h2>
+    <p style="font-size:12px; color:#666; margin-top:-4px;">
+      Yellow cells are editable directly in the table. Fill in <b>Module / Function Group / Derivation</b> per row, then click
+      "Regenerate names" to rebuild the PFCG role and catalog/space/page names from your templates above. Function groups and master roles are clustered from End User(s), never Business User.
+      "Critical (confirmed)" is always yours to set — the "(suggested)" column is a keyword heuristic only, not a scrape.
+    </p>
+    <div class="row" style="margin-bottom:10px;">
+      <button class="secondary" onclick="regenerateNames()">Regenerate names from current Module/Function Group/Derivation</button>
+      <button class="secondary" onclick="regroupByEndUsers()">Regroup by End Users</button>
+    </div>
+    <div class="table-wrap">
+      <table id="resultsTable">
+        <thead><tr id="tableHead"></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <details style="margin-top:14px;">
+      <summary>Raw fields returned per app (use this to verify field names against FIELD_CANDIDATES in fiori_core.py)</summary>
+      <div id="rawInspector"></div>
+    </details>
+
+    <footer class="actions">
+      <button onclick="exportExcel()">Download updated Excel</button>
+      <span id="exportStatus" class="status-msg"></span>
+    </footer>
+  </div>
+
+</main>
+
+<script>
+let currentRows = [];
+
+const EDITABLE_COLUMNS = ["Module", "Function Group", "Derivation", "End User(s)", "PCG Role (PFCG)", "Critical (confirmed)"];
+const DISPLAY_COLUMNS = [
+  "App ID", "App Title", "Maintain/Display", "Target Mapping Note",
+  "SAP Business Catalog", "SAP Role Template",
+  "Module", "Function Group", "Derivation", "End User(s)", "Business User", "PCG Role (PFCG)",
+  "Critical (suggested)", "Critical (confirmed)",
+  "Master Role (PFCG)", "Derived Role (PFCG)", "Role Description (generated)",
+  "Custom Business Catalog", "Custom Catalog Description", "Space", "Space Description", "Page",
+  "Flags/Notes",
+];
+
+function getTemplates() {
+  return {
+    activity_code_maintain: "M",
+    activity_code_display: "D",
+    activity_code_unconfirmed: "X",
+    master_role_name: document.getElementById("t_master_role_name").value,
+    derived_role_name: document.getElementById("t_derived_role_name").value,
+    role_description: document.getElementById("t_role_description").value,
+    catalog_name: document.getElementById("t_catalog_name").value,
+    catalog_description: document.getElementById("t_catalog_description").value,
+    space_name: document.getElementById("t_space_name").value,
+    space_description: document.getElementById("t_space_description").value,
+    page_name: document.getElementById("t_page_name").value,
+    page_description: document.getElementById("t_page_description").value,
+  };
+}
+
+function getRowMeta() {
+  // pulls Module/Function Group/Persona currently shown in the table
+  // (used when regenerating names without re-fetching)
+  const meta = {};
+  currentRows.forEach(r => {
+    meta[r["App ID"]] = {
+      module: r["Module"] || "",
+      function_group: r["Function Group"] || "",
+      persona: r["Persona"] || "",
+      derivation: r["Derivation"] || "",
+      end_users: r["End User(s)"] || "",
+      pcg_role: r["PCG Role (PFCG)"] || "",
+    };
+  });
+  return meta;
+}
+
+function getNewAppEntries() {
+  const derivations = document.getElementById("derivations").value.split("\n");
+  return document.getElementById("appIds").value.split("\n")
+    .map((line, index) => ({line: line.trim(), derivation: (derivations[index] || "").trim()}))
+    .filter(entry => entry.line).map(entry => {
+      const line = entry.line;
+      const match = line.match(/^(.+?)\s*\(([^)]*)\)\s*$/);
+      const appId = (match ? match[1] : line).trim();
+      const endUsers = match ? match[2].split(",").map(value => value.trim()).filter(Boolean) : [];
+      return {appId, endUsers, derivation: entry.derivation};
+    });
+}
+
+async function fetchApps() {
+  const entries = getNewAppEntries();
+  const typedIds = entries.map(entry => entry.appId);
+  const currentIds = new Set(currentRows.map(r => r["App ID"].toLowerCase()));
+  const allIds = [...new Map(typedIds
+    .map(id => [id.toLowerCase(), id])).values()];
+  if (allIds.length === 0) { setStatus("fetchStatus", "Enter at least one App ID.", true); return; }
+
+  const entryUsers = Object.fromEntries(entries.map(entry => [entry.appId.toLowerCase(), entry.endUsers]));
+  const entryDerivations = Object.fromEntries(entries.map(entry => [entry.appId.toLowerCase(), entry.derivation]));
+  const messages = [];
+  const newIds = allIds.filter(id => !currentIds.has(id.toLowerCase()));
+
+  allIds.filter(id => currentIds.has(id.toLowerCase())).forEach(id => {
+    const usersToAdd = entryUsers[id.toLowerCase()];
+    if (!usersToAdd.length) return;
+    const row = currentRows.find(item => item["App ID"].toLowerCase() === id.toLowerCase());
+    const users = (row["End User(s)"] || "").split(/[;,\n]+/).map(value => value.trim()).filter(Boolean);
+    usersToAdd.forEach(user => {
+      if (users.some(value => value.toLowerCase() === user.toLowerCase())) {
+        messages.push(`${id} + ${user} is already in the matrix.`);
+      } else {
+        users.push(user);
+        messages.push(`${user} was added to ${id}.`);
+      }
+    });
+    row["End User(s)"] = [...new Set(users)].join("; ");
+  });
+  renderTable();
+
+  const ids = newIds;
+  if (ids.length === 0) {
+    setStatus("fetchStatus", messages.join(" "), false, true);
+    document.getElementById("appIds").value = "";
+    return;
+  }
+  setStatus("fetchStatus", "Fetching...", false);
+  document.getElementById("fetchBtn").disabled = true;
+
+  try {
+    const resp = await fetch("/api/fetch", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        app_ids: ids,
+        refresh: document.getElementById("refreshCache").checked,
+        templates: getTemplates(),
+        row_meta: Object.fromEntries(ids.map(id => [id, {
+          end_users: entryUsers[id.toLowerCase()].join("; "),
+          derivation: entryDerivations[id.toLowerCase()] || "",
+        }])),
+        existing_rows: currentRows,
+      }),
+    });
+    if (!resp.ok) throw new Error("Server returned " + resp.status);
+    const data = await resp.json();
+    Object.entries(data.updated_existing || {}).forEach(([key, row]) => {
+      const index = currentRows.findIndex(item => item["App ID"].toLowerCase() === key);
+      if (index !== -1) currentRows[index] = {...currentRows[index], ...row};
+    });
+    currentRows = [...currentRows, ...data.rows];
+    renderTable();
+    renderRawInspector();
+    setStatus("fetchStatus", (messages.length ? messages.join(" ") + " " : "") +
+      `Loaded ${currentRows.length} app(s).`, false, true);
+  } catch (err) {
+    setStatus("fetchStatus", "Fetch failed: " + err.message +
+      " — check that app.py has network access to fioriappslibrary.hana.ondemand.com.", true);
+  } finally {
+    document.getElementById("fetchBtn").disabled = false;
+  }
+}
+
+async function importMatrix() {
+  const file = document.getElementById("matrixFile").files[0];
+  if (!file) { setStatus("importStatus", "Choose an Excel matrix first.", true); return; }
+  const form = new FormData();
+  form.append("file", file);
+  setStatus("importStatus", "Reading matrix...", false);
+  try {
+    const resp = await fetch("/api/import", { method: "POST", body: form });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Server returned " + resp.status);
+    currentRows = data.rows;
+    document.getElementById("appIds").value = "";
+    renderTable();
+    setStatus("importStatus", `Imported ${currentRows.length} unique app(s).`, false, true);
+  } catch (err) {
+    setStatus("importStatus", "Import failed: " + err.message, true);
+  }
+}
+
+async function regenerateNames() {
+  const ids = currentRows.map(r => r["App ID"]);
+  if (ids.length === 0) return;
+  setStatus("fetchStatus", "Regenerating...", false);
+  const resp = await fetch("/api/fetch", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      app_ids: ids,
+      refresh: false,
+      templates: getTemplates(),
+      row_meta: getRowMeta(),
+      existing_rows: currentRows,
+    }),
+  });
+  const data = await resp.json();
+  Object.entries(data.updated_existing || {}).forEach(([key, row]) => {
+    const index = currentRows.findIndex(item => item["App ID"].toLowerCase() === key);
+    if (index !== -1) currentRows[index] = {...currentRows[index], ...row};
+  });
+  currentRows = [...currentRows, ...data.rows];
+  renderTable();
+  setStatus("fetchStatus", "Names regenerated.", false, true);
+}
+
+function renderTable() {
+  const head = document.getElementById("tableHead");
+  const body = document.getElementById("tableBody");
+  head.innerHTML = DISPLAY_COLUMNS.map(c => `<th>${c}</th>`).join("");
+  body.innerHTML = "";
+
+  currentRows.forEach((row, idx) => {
+    const tr = document.createElement("tr");
+    DISPLAY_COLUMNS.forEach(col => {
+      const td = document.createElement("td");
+      const editable = EDITABLE_COLUMNS.includes(col);
+      td.textContent = row[col] || "";
+      if (editable) {
+        td.contentEditable = "true";
+        td.addEventListener("blur", () => {
+          currentRows[idx][col] = td.textContent;
+          if (col === "End User(s)") regroupByEndUsers();
+        });
+      }
+      if (col === "Flags/Notes" && row[col] && row[col] !== "OK") {
+        td.classList.add("flag-warn");
+      }
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+async function regroupByEndUsers() {
+  if (currentRows.length === 0) return;
+  setStatus("fetchStatus", "Regrouping by End Users...", false);
+  const resp = await fetch("/api/fetch", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({app_ids: [], existing_rows: currentRows, row_meta: {}}),
+  });
+  if (!resp.ok) {
+    setStatus("fetchStatus", "Regrouping failed.", true);
+    return;
+  }
+  const data = await resp.json();
+  Object.entries(data.updated_existing || {}).forEach(([key, row]) => {
+    const index = currentRows.findIndex(item => item["App ID"].toLowerCase() === key);
+    if (index !== -1) currentRows[index] = {...currentRows[index], ...row};
+  });
+  renderTable();
+  setStatus("fetchStatus", "Groups recalculated from End Users.", false, true);
+}
+
+function renderRawInspector() {
+  const container = document.getElementById("rawInspector");
+  container.innerHTML = "";
+  currentRows.forEach(row => {
+    const block = document.createElement("div");
+    block.className = "raw-app-block";
+    block.innerHTML = `<b>${row["App ID"]}</b> (status: ${row["Status"]})
+      <pre>${JSON.stringify(row["_raw"], null, 2)}</pre>`;
+    container.appendChild(block);
+  });
+}
+
+async function exportExcel() {
+  if (currentRows.length === 0) { setStatus("exportStatus", "Nothing to export yet.", true); return; }
+  setStatus("exportStatus", "Building file...", false);
+  const resp = await fetch("/api/export", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ rows: currentRows }),
+  });
+  if (!resp.ok) { setStatus("exportStatus", "Export failed.", true); return; }
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "fiori_app_matrix.xlsx";
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus("exportStatus", "Downloaded.", false, true);
+}
+
+function setStatus(elId, msg, isError, isOk) {
+  const el = document.getElementById(elId);
+  el.textContent = msg;
+  el.className = "status-msg" + (isError ? " error" : isOk ? " ok" : "");
+}
+</script>
+
+</body>
+</html>
